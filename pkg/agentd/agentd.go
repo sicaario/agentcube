@@ -58,6 +58,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 
 		expirationTime := lastActivity.Add(SessionExpirationTimeout)
+		
+		// Use custom idle timeout if defined
+		if timeoutStr, exists := sandbox.Annotations[workloadmanager.IdleTimeoutAnnotationKey]; exists && timeoutStr != "" {
+			if customTimeout, err := time.ParseDuration(timeoutStr); err == nil {
+				expirationTime = lastActivity.Add(customTimeout)
+			}
+		}
 		// Delete sandbox if expired
 		if time.Now().After(expirationTime) {
 			if err := r.Delete(ctx, sandbox); err != nil {

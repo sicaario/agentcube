@@ -199,6 +199,56 @@ func TestReconciler_Reconcile_LifecycleOrchestration(t *testing.T) {
 			expectedRequeueAt: 1 * time.Minute,
 			description:       "Should requeue when close to expiration",
 		},
+		{
+			name: "Sandbox with custom short timeout should be deleted",
+			sandbox: &sandboxv1alpha1.Sandbox{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "custom-short-timeout-sandbox",
+					Namespace: "default",
+					Annotations: map[string]string{
+						workloadmanager.LastActivityAnnotationKey: now.Add(-6 * time.Minute).Format(time.RFC3339),
+						workloadmanager.IdleTimeoutAnnotationKey:  "5m",
+					},
+				},
+			},
+			expectDeletion: true,
+			expectRequeue:  false,
+			description:    "Should delete when past custom shorter expiration time",
+		},
+		{
+			name: "Sandbox with custom long timeout should be requeued",
+			sandbox: &sandboxv1alpha1.Sandbox{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "custom-long-timeout-sandbox",
+					Namespace: "default",
+					Annotations: map[string]string{
+						workloadmanager.LastActivityAnnotationKey: now.Add(-20 * time.Minute).Format(time.RFC3339),
+						workloadmanager.IdleTimeoutAnnotationKey:  "1h",
+					},
+				},
+			},
+			expectDeletion:    false,
+			expectRequeue:     true,
+			expectedRequeueAt: 40 * time.Minute, // 1h timeout - 20m elapsed
+			description:       "Should requeue when not past custom longer expiration time",
+		},
+		{
+			name: "Sandbox with invalid custom timeout should fallback to default",
+			sandbox: &sandboxv1alpha1.Sandbox{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "invalid-timeout-sandbox",
+					Namespace: "default",
+					Annotations: map[string]string{
+						workloadmanager.LastActivityAnnotationKey: now.Add(-10 * time.Minute).Format(time.RFC3339),
+						workloadmanager.IdleTimeoutAnnotationKey:  "invalid-duration",
+					},
+				},
+			},
+			expectDeletion:    false,
+			expectRequeue:     true,
+			expectedRequeueAt: 5 * time.Minute, // Falls back to 15m default timeout - 10m elapsed
+			description:       "Should fallback to default expiration time when custom timeout is invalid",
+		},
 	}
 
 	for _, tt := range tests {
